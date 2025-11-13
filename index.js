@@ -13,9 +13,9 @@ app.use(express.json());
 app.post('/api/print', (req, res) => {
     try {
       const { items, order } = req.body;
-      const device = new escpos.USB(0x0FE6, 0x811E); // your printer IDs
+      const device = new escpos.USB(0x0FE6, 0x811E);
       const printer = new escpos.Printer(device);
-
+      
       device.open((err) => {
         if (err) {
           console.error("Printer open error:", err);
@@ -31,6 +31,8 @@ app.post('/api/print', (req, res) => {
           .text("RM's Collection")
           .style("NORMAL")
           .size(0, 0)
+          .text("11 Luzon St., South Signal Village")
+          .text("Taguig City")
           .text(new Date().toLocaleString())
           .text("--------------------------------");
 
@@ -42,29 +44,60 @@ app.post('/api/print', (req, res) => {
         printer.text("--------------------------------");
 
         // --- Table Header ---
-        printer.text("Item         Qty  Price  Total");
+        const headerQty = "Qty".padEnd(5, " ");
+        const headerPrice = "Price".padStart(8, " ");
+        const headerDisc = "Disc.".padStart(8, " ");
+        const headerTotal = "Total".padStart(8, " ");
+        printer.text(`${headerQty}${headerPrice} ${headerDisc}${headerTotal}`);
         printer.text("--------------------------------");
 
         // --- Items ---
+        let totalDiscount = 0;
         items.forEach((item) => {
-          const name = (item.name || "Unknown").slice(0, 12).padEnd(12, " ");
-          const qty = item.quantity.toString().padStart(3, " ");
-          const price = item.price.toFixed(2).padStart(6, " ");
-          const total = item.lineTotal.toFixed(2).padStart(7, " ");
-          printer.text(`${name} ${qty} ${price} ${total}`);
+          const discount = item.discount || 0;
+          const attributes = Object.entries(item.attributes);
+          let attrs = ''
+          if (attributes.length > 0) {
+            attrs = attributes
+              .map(([_, value]) => `${value.trim()}`)
+              .join(" - ");
+          }
+          const name = `${item.name} ${attributes > 0 ? `(${attrs})` : ''}`;
+          const qty = `x${item.quantity}`.padEnd(5, " ");
+          const price = item.price.toFixed(2);
+          const discountAmount = (item.lineTotal * (discount / 100));
+          const discountedTotal = (item.lineTotal - discountAmount).toFixed(2);
+          
+          // Accumulate total discount
+          totalDiscount += discountAmount;
+          
+          printer.text(`${name}`);
 
-          if (item.attributes && item.attributes.size > 0) {
-            const attrs = Array.from(item.attributes.entries())
-              .map(([key, value]) => `${key}: ${value.trim()}`)
-              .join(", ");
-            printer.text(`  ${attrs}`);
+          // Print qty, price, discount, total on next line with proper alignment
+          if (discount > 0) {
+            const priceStr = price.padStart(8, " ");
+            const discountStr = `${discount}%`.padStart(8, " ");
+            const totalStr = discountedTotal.padStart(8, " ");
+            printer.text(`${qty}${priceStr}${discountStr}${totalStr}`);
+          } else {
+            const priceStr = price.padStart(8, " ");
+            const totalStr = discountedTotal.padStart(8, " ");
+            printer.text(`${qty}${priceStr}        ${totalStr}`);
           }
         });
 
         // --- Totals & Payment ---
         printer.text("--------------------------------");
-        printer.align("RT").style("B");
-        printer.text(`Subtotal: ${order.total.toFixed(2)}`);
+        printer.align("LT").style("B");
+        
+        // Calculate subtotal before discount
+        const subtotalBeforeDiscount = order.total + totalDiscount;
+        
+        printer.text(`Subtotal: ${subtotalBeforeDiscount.toFixed(2)}`);
+        if (totalDiscount > 0) {
+          printer.text(`Discount: -${totalDiscount.toFixed(2)}`);
+        }
+        printer.text(`Total:    ${order.total.toFixed(2)}`);
         printer.text(`Payment:  ${order.paymentAmount.toFixed(2)}`);
         printer.text(`Change:   ${order.change.toFixed(2)}`);
         printer.text("--------------------------------");
