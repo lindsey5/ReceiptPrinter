@@ -28,7 +28,7 @@ app.post('/api/print', (req, res) => {
           .align("CT")
           .style("B")
           .size(0, 0)
-          .text("RM's Collection")
+          .text("RM Collections")
           .style("NORMAL")
           .size(0, 0)
           .text("11 Luzon St., South Signal Village")
@@ -105,7 +105,7 @@ app.post('/api/print', (req, res) => {
         // --- Footer ---
         printer.align("CT").style("NORMAL");
         printer.text("Thank you for shopping!");
-        printer.text("RM's Collection");
+        printer.text("RM Collections");
         printer.text("--------------------------------");
         printer.feed(2);
 
